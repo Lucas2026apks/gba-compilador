@@ -1,5 +1,5 @@
 #define REG_DISPCNT  *(volatile unsigned short*)0x4000000
-#define VRAM         (volatile unsigned short*)0x6000000
+#define VRAM         ((volatile unsigned short*)0x6000000)
 #define KEYINPUT     *(volatile unsigned short*)0x04000130
 
 #define MODE3        3
@@ -81,7 +81,7 @@ void drawRect(int x, int y, int w, int h, unsigned short color) {
 }
 
 // Mapa de Santa Cruz con Corral de Vacas y Gasolinera
-void drawSantaCruzMap(Campo campos[], int numCampos, int lecheDisponible) {
+void drawSantaCruzMap(Campo campos[], int numCampos) {
     // Fondo Monte / Vegetación
     drawRect(0, 0, SCREEN_W, SCREEN_H, COLOR(4, 12, 3));
 
@@ -132,7 +132,6 @@ int main(void) {
     int timerGasolina = 0;
 
     Personaje dueno = { .x = 120, .y = 90, .isDriver = 0 };
-    Personaje trabajador = { .x = 35, .y = 35, .isDriver = 1 };
 
     Vehiculo camioneta = { .x = 125, .y = 77, .w = 12, .h = 8, .speed = 2, .isOccupied = 0, .implemento = -1, .tolva = 0, .capTolva = 0, .gasolina = 100, .aiActive = 0 };
     Vehiculo tractor = { .x = 30, .y = 30, .w = 10, .h = 10, .speed = 1, .isOccupied = 1, .implemento = MAQ_ARADO, .tolva = 0, .capTolva = 100, .gasolina = 100, .aiActive = 0 };
@@ -241,10 +240,10 @@ int main(void) {
 
         // --- CONTROL DEL TRABAJADOR / TRACTOR ---
         if (charActivo == 1 && !tractor.aiActive && tractor.gasolina > 0) {
-            if (keys & KEY_RIGHT) { tractor.x += tractor.speed; trabajador.x = tractor.x; }
-            if (keys & KEY_LEFT)  { tractor.x -= tractor.speed; trabajador.x = tractor.x; }
-            if (keys & KEY_UP)    { tractor.y -= tractor.speed; trabajador.y = tractor.y; }
-            if (keys & KEY_DOWN)  { tractor.y += tractor.speed; trabajador.y = tractor.y; }
+            if (keys & KEY_RIGHT) { tractor.x += tractor.speed; }
+            if (keys & KEY_LEFT)  { tractor.x -= tractor.speed; }
+            if (keys & KEY_UP)    { tractor.y -= tractor.speed; }
+            if (keys & KEY_DOWN)  { tractor.y += tractor.speed; }
 
             // B: Cambiar Implemento
             if ((keys & KEY_B) && !(prevKeys & KEY_B)) {
@@ -289,7 +288,7 @@ int main(void) {
         }
 
         // --- RENDERIZADO GENERAL ---
-        drawSantaCruzMap(campos, 2, abonoCorral);
+        drawSantaCruzMap(campos, 2);
 
         // Vehículos
         drawRect(camioneta.x, camioneta.y, camioneta.w, camioneta.h, COLOR(2, 10, 28)); 
