@@ -1,13 +1,14 @@
 #define REG_DISPCNT  *(volatile unsigned short*)0x4000000
 #define VRAM         ((volatile unsigned short*)0x6000000)
 #define KEYINPUT     *(volatile unsigned short*)0x04000130
+#define REG_VCOUNT   *(volatile unsigned short*)0x4000006
 
 #define MODE3        3
 #define BG2_ENABLE   (1 << 10)
 
 #define COLOR(r, g, b) ((r) | ((g) << 5) | ((b) << 10))
 
-// Máscaras de botones GBA
+// Botones de la GBA
 #define KEY_A        (1 << 0)
 #define KEY_B        (1 << 1)
 #define KEY_SELECT   (1 << 2)
@@ -22,19 +23,21 @@
 #define SCREEN_W 240
 #define SCREEN_H 160
 
-// Estados de la Tierra (FS14)
+// Dimensiones del Mapa Completo de Santa Cruz
+#define MAP_W 512
+#define MAP_H 512
+
+// Estados de la Tierra y Cultivos
 #define TIERRA_PASTO       0
 #define TIERRA_ARADA       1
 #define TIERRA_SEMBRADA    2
 #define TIERRA_CRECIENDO   3
 #define TIERRA_LISTA       4
 
-// Cultivos
 #define CULTIVO_TRIGO      0
 #define CULTIVO_MAIZ       1
 #define CULTIVO_GIRASOL    2
 
-// Maquinaria e Implementos
 #define MAQ_ARADO          0
 #define MAQ_SEMBRADORA     1
 #define MAQ_COSECHADORA    2
@@ -53,8 +56,8 @@ typedef struct {
     int implemento;
     int tolva;
     int capTolva;
-    int gasolina;    // Nivel de combustible (0-100)
-    int aiActive;    // Piloto Automático
+    int gasolina;
+    int aiActive;
 } Vehiculo;
 
 typedef struct {
@@ -65,61 +68,141 @@ typedef struct {
     int fertilizado;
 } Campo;
 
-// --- DIBUJADO DE PANTALLA ---
-void drawPixel(int x, int y, unsigned short color) {
+typedef struct {
+    int x, y;
+} Camera;
+
+// Función de Espera VBlank (Evita el parpadeo de pantalla)
+void waitForVBlank(void) {
+    while (REG_VCOUNT >= 160);
+    while (REG_VCOUNT < 160);
+}
+
+// Dibujar pixel en pantalla considerando la cámara
+void drawPixelCam(int worldX, int worldY, unsigned short color, Camera cam) {
+    int screenX = worldX - cam.x;
+    int screenY = worldY - cam.y;
+
+    if (screenX >= 0 && screenX < SCREEN_W && screenY >= 0 && screenY < SCREEN_H) {
+        VRAM[screenY * SCREEN_W + screenX] = color;
+    }
+}
+
+// Dibujar rectángulo con coordenadas de mundo (Cámara)
+void drawRectCam(int worldX, int worldY, int w, int h, unsigned short color, Camera cam) {
+    for (int i = 0; i < h; i++) {
+        for (int j = 0; j < w; j++) {
+            drawPixelCam(worldX + j, worldY + i, color, cam);
+        }
+    }
+}
+
+// Dibujar pixel directo en pantalla (para HUD y Minimapa)
+void drawPixelScreen(int x, int y, unsigned short color) {
     if (x >= 0 && x < SCREEN_W && y >= 0 && y < SCREEN_H) {
         VRAM[y * SCREEN_W + x] = color;
     }
 }
 
-void drawRect(int x, int y, int w, int h, unsigned short color) {
+// Dibujar rectángulo directo en pantalla (para HUD y Minimapa)
+void drawRectScreen(int x, int y, int w, int h, unsigned short color) {
     for (int i = 0; i < h; i++) {
         for (int j = 0; j < w; j++) {
-            drawPixel(x + j, y + i, color);
+            drawPixelScreen(x + j, y + i, color);
         }
     }
 }
 
-// Mapa de Santa Cruz con Corral de Vacas y Gasolinera
-void drawSantaCruzMap(Campo campos[], int numCampos) {
-    // Fondo Monte / Vegetación
-    drawRect(0, 0, SCREEN_W, SCREEN_H, COLOR(4, 12, 3));
+// Dibujo del mapa de Santa Cruz de la Sierra (Anillos, Radiales y Río Piraí)
+void drawSantaCruzMap(Camera cam, Campo campos[], int numCampos) {
+    // Fondo de la vegetación general
+    int startX = cam.x;
+    int endX = cam.x + SCREEN_W;
+    int startY = cam.y;
+    int endY = cam.y + SCREEN_H;
 
-    // Red de Caminos
-    drawRect(0, 75, SCREEN_W, 14, COLOR(20, 12, 5));
-    drawRect(110, 0, 14, SCREEN_H, COLOR(20, 12, 5));
+    for (int y = startY; y < endY; y++) {
+        for (int x = startX; x < endX; x++) {
+            unsigned short color = COLOR(4, 10, 3); // Verde base rural
 
-    // Silo de Acopio (Arriba a la Derecha)
-    drawRect(190, 5, 45, 35, COLOR(12, 12, 12));
-    drawRect(195, 10, 35, 25, COLOR(28, 22, 0));
+            // Río Piraí (Franja curva a la izquierda)
+            if (x < 70 + (y / 8)) {
+                color = COLOR(5, 15, 25); // Azul Río
+            }
+            // Zonas ribereñas (Playones)
+            else if (x < 85 + (y / 8)) {
+                color = COLOR(18, 16, 10); // Arena/Tierra
+            }
+            else {
+                // Anillos Concéntricos de Santa Cruz
+                int dx = x - 256;
+                int dy = y - 256;
+                int distSq = (dx * dx + dy * dy);
 
-    // Estación de Servicio / Gasolinera (Arriba a la Izquierda)
-    drawRect(5, 5, 35, 30, COLOR(25, 5, 5)); // Edificio rojo
-    drawRect(10, 20, 10, 10, COLOR(31, 31, 0)); // Surtidor
+                // 1er Anillo (Centro histórico)
+                if (distSq >= 40*40 && distSq <= 44*44) color = COLOR(12, 12, 12);
+                // 2do Anillo
+                else if (distSq >= 85*85 && distSq <= 90*90) color = COLOR(12, 12, 12);
+                // 3er Anillo
+                else if (distSq >= 135*135 && distSq <= 141*141) color = COLOR(12, 12, 12);
+                // 4to Anillo
+                else if (distSq >= 190*190 && distSq <= 197*197) color = COLOR(12, 12, 12);
 
-    // Corral de Ganado Vacuno (Abajo a la Izquierda)
-    drawRect(5, 100, 50, 50, COLOR(16, 10, 4));  // Cerca/Tierra
-    drawRect(15, 110, 6, 4, COLOR(31, 31, 31));  // Vaca 1 (Blanca/Negra)
-    drawRect(17, 112, 2, 2, COLOR(0, 0, 0));
-    drawRect(30, 125, 6, 4, COLOR(31, 31, 31));  // Vaca 2
-    drawRect(32, 127, 2, 2, COLOR(0, 0, 0));
+                // Radiales principales (Líneas cruzadas)
+                else if ((x >= 254 && x <= 258) || (y >= 254 && y <= 258)) color = COLOR(12, 12, 12); // Norte-Sur y Este-Oeste
+                else if ((x - y >= -4 && x - y <= 4) || (x + y >= 508 && x + y <= 516)) color = COLOR(10, 10, 10); // Diagonal
+            }
 
-    // Dibujar Campos y sus Estados
+            drawPixelCam(x, y, color, cam);
+        }
+    }
+
+    // Dibujar Campos de Cultivo
     for (int i = 0; i < numCampos; i++) {
-        unsigned short col = COLOR(4, 12, 3);
+        unsigned short col = COLOR(4, 10, 3);
         switch (campos[i].estado) {
-            case TIERRA_PASTO:     col = COLOR(4, 12, 3); break;
+            case TIERRA_PASTO:     col = COLOR(5, 12, 4); break;
             case TIERRA_ARADA:     col = COLOR(12, 7, 2); break;
             case TIERRA_SEMBRADA:  col = COLOR(15, 10, 3); break;
-            case TIERRA_CRECIENDO: col = COLOR(6, 18, 4); break;
+            case TIERRA_CRECIENDO; col = COLOR(6, 18, 4); break;
             case TIERRA_LISTA:     
                 if (campos[i].cultivo == CULTIVO_TRIGO)   col = COLOR(31, 26, 0); 
                 if (campos[i].cultivo == CULTIVO_MAIZ)    col = COLOR(31, 18, 0); 
                 if (campos[i].cultivo == CULTIVO_GIRASOL) col = COLOR(25, 25, 5); 
                 break;
         }
-        drawRect(campos[i].x, campos[i].y, campos[i].w, campos[i].h, col);
+        drawRectCam(campos[i].x, campos[i].y, campos[i].w, campos[i].h, col, cam);
     }
+
+    // Gasolinera (Norte) y Silo de Acopio (Este)
+    drawRectCam(235, 120, 42, 32, COLOR(25, 5, 5), cam);  // Gasolinera
+    drawRectCam(380, 240, 50, 40, COLOR(15, 15, 15), cam); // Silos
+}
+
+// Dibujo del Minimapa en la Esquina Superior Izquierda (Estilo GTA)
+void drawMinimap(int playerX, int playerY) {
+    int miniW = 48;
+    int miniH = 48;
+    int miniX = 6;
+    int miniY = 6;
+
+    // Borde del minimapa
+    drawRectScreen(miniX - 2, miniY - 2, miniW + 4, miniH + 4, COLOR(0, 0, 0));
+    drawRectScreen(miniX, miniY, miniW, miniH, COLOR(3, 8, 2));
+
+    // Estructura simplificada del minimapa
+    // Río Piraí
+    drawRectScreen(miniX + 2, miniY, 6, miniH, COLOR(5, 15, 25));
+
+    // Anillos en el minimapa (Líneas de referencia)
+    drawRectScreen(miniX + 16, miniY + 16, 16, 16, COLOR(12, 12, 12)); // 2do Anillo
+    drawRectScreen(miniX + 8, miniY + 8, 32, 32, COLOR(8, 8, 8));     // 4to Anillo
+
+    // Posición del Jugador en el Minimapa (Punto brillante)
+    int pMiniX = miniX + (playerX * miniW) / MAP_W;
+    int pMiniY = miniY + (playerY * miniH) / MAP_H;
+
+    drawRectScreen(pMiniX - 1, pMiniY - 1, 3, 3, COLOR(31, 31, 0)); // Punto amarillo
 }
 
 int main(void) {
@@ -128,37 +211,34 @@ int main(void) {
     int dinero = 1000;
     int tipoSemilla = CULTIVO_TRIGO;
     int charActivo = 0; // 0 = Dueño, 1 = Trabajador
-    int abonoCorral = 100;
     int timerGasolina = 0;
 
-    Personaje dueno = { .x = 120, .y = 90, .isDriver = 0 };
+    Camera cam = { .x = 180, .y = 180 };
 
-    Vehiculo camioneta = { .x = 125, .y = 77, .w = 12, .h = 8, .speed = 2, .isOccupied = 0, .implemento = -1, .tolva = 0, .capTolva = 0, .gasolina = 100, .aiActive = 0 };
-    Vehiculo tractor = { .x = 30, .y = 30, .w = 10, .h = 10, .speed = 1, .isOccupied = 1, .implemento = MAQ_ARADO, .tolva = 0, .capTolva = 100, .gasolina = 100, .aiActive = 0 };
+    Personaje dueno = { .x = 250, .y = 250, .isDriver = 0 };
+
+    Vehiculo camioneta = { .x = 265, .y = 250, .w = 16, .h = 10, .speed = 2, .isOccupied = 0, .implemento = -1, .tolva = 0, .capTolva = 0, .gasolina = 100, .aiActive = 0 };
+    Vehiculo tractor = { .x = 310, .y = 300, .w = 14, .h = 12, .speed = 1, .isOccupied = 1, .implemento = MAQ_ARADO, .tolva = 0, .capTolva = 100, .gasolina = 100, .aiActive = 0 };
 
     Campo campos[2] = {
-        { .x = 10, .y = 40, .w = 90, .h = 30, .estado = TIERRA_ARADA, .cultivo = CULTIVO_TRIGO, .timerCrecimiento = 0, .fertilizado = 0 },
-        { .x = 135, .y = 95, .w = 90, .h = 55, .estado = TIERRA_LISTA, .cultivo = CULTIVO_TRIGO, .timerCrecimiento = 0, .fertilizado = 0 }
+        { .x = 120, .y = 280, .w = 110, .h = 70, .estado = TIERRA_ARADA, .cultivo = CULTIVO_TRIGO, .timerCrecimiento = 0, .fertilizado = 0 },
+        { .x = 320, .y = 120, .w = 120, .h = 80, .estado = TIERRA_LISTA, .cultivo = CULTIVO_TRIGO, .timerCrecimiento = 0, .fertilizado = 0 }
     };
 
     unsigned short prevKeys = 0;
 
     while (1) {
-        // VSync
-        volatile unsigned short* scanline = (volatile unsigned short*)0x4000006;
-        while (*scanline < 160);
-
         unsigned short keys = ~KEYINPUT;
         timerGasolina++;
 
         // --- CONSUMO DE GASOLINA ---
-        if (timerGasolina > 180) { // Cada ~3 segundos consume gasolina en uso
+        if (timerGasolina > 180) {
             if (tractor.gasolina > 0 && (tractor.aiActive || charActivo == 1)) tractor.gasolina--;
             if (camioneta.gasolina > 0 && dueno.isDriver) camioneta.gasolina--;
             timerGasolina = 0;
         }
 
-        // --- CICLO DE CRECIMIENTO DE CULTIVOS ---
+        // --- CICLO DE CULTIVOS ---
         for (int i = 0; i < 2; i++) {
             int multFertil = campos[i].fertilizado ? 2 : 1;
             if (campos[i].estado == TIERRA_SEMBRADA) {
@@ -173,43 +253,19 @@ int main(void) {
             }
         }
 
-        // --- CAMBIO DE PERSONAJE (L / R) ---
+        // --- CONTROLES Y CAMBIO DE PERSONAJE ---
         if ((keys & KEY_L) && !(prevKeys & KEY_L)) charActivo = 0;
         if ((keys & KEY_R) && !(prevKeys & KEY_R)) charActivo = 1;
 
-        // SELECT: Cambiar Tipo de Semilla
         if ((keys & KEY_SELECT) && !(prevKeys & KEY_SELECT)) {
             tipoSemilla = (tipoSemilla + 1) % 3;
         }
 
-        // START: Activar/Desactivar Piloto Automático IA
         if ((keys & KEY_START) && !(prevKeys & KEY_START)) {
             if (tractor.gasolina > 0) tractor.aiActive = !tractor.aiActive;
         }
 
-        // --- RECARGAR GASOLINA (EN GASOLINERA) ---
-        if (keys & KEY_START) {
-            // Recargar Camioneta
-            if (camioneta.x <= 40 && camioneta.y <= 40 && dinero >= 5 && camioneta.gasolina < 100) {
-                camioneta.gasolina += 2;
-                dinero -= 1;
-            }
-            // Recargar Tractor
-            if (tractor.x <= 40 && tractor.y <= 40 && dinero >= 5 && tractor.gasolina < 100) {
-                tractor.gasolina += 2;
-                dinero -= 1;
-            }
-        }
-
-        // --- PILOTO AUTOMÁTICO IA ---
-        if (tractor.aiActive && tractor.gasolina > 0) {
-            tractor.x += 1;
-            if (tractor.x > 95) tractor.x = 10;
-        } else {
-            tractor.aiActive = 0;
-        }
-
-        // --- CONTROL DEL DUEÑO (A PIE / VEHÍCULO) ---
+        // --- MOVIMIENTO DEL DUEÑO Y CAMIONETA ---
         if (charActivo == 0) {
             if (!dueno.isDriver) {
                 if (keys & KEY_RIGHT) dueno.x++;
@@ -218,8 +274,8 @@ int main(void) {
                 if (keys & KEY_DOWN)  dueno.y++;
 
                 if ((keys & KEY_A) && !(prevKeys & KEY_A)) {
-                    if (dueno.x >= camioneta.x - 5 && dueno.x <= camioneta.x + 15 &&
-                        dueno.y >= camioneta.y - 5 && dueno.y <= camioneta.y + 15) {
+                    if (dueno.x >= camioneta.x - 8 && dueno.x <= camioneta.x + 20 &&
+                        dueno.y >= camioneta.y - 8 && dueno.y <= camioneta.y + 20) {
                         dueno.isDriver = 1;
                         camioneta.isOccupied = 1;
                     }
@@ -233,24 +289,23 @@ int main(void) {
                 if ((keys & KEY_A) && !(prevKeys & KEY_A)) {
                     dueno.isDriver = 0;
                     camioneta.isOccupied = 0;
-                    dueno.x = camioneta.x + 15;
+                    dueno.x = camioneta.x + 20;
                 }
             }
         }
 
-        // --- CONTROL DEL TRABAJADOR / TRACTOR ---
+        // --- MOVIMIENTO DEL TRACTOR ---
         if (charActivo == 1 && !tractor.aiActive && tractor.gasolina > 0) {
             if (keys & KEY_RIGHT) { tractor.x += tractor.speed; }
             if (keys & KEY_LEFT)  { tractor.x -= tractor.speed; }
             if (keys & KEY_UP)    { tractor.y -= tractor.speed; }
             if (keys & KEY_DOWN)  { tractor.y += tractor.speed; }
 
-            // B: Cambiar Implemento
             if ((keys & KEY_B) && !(prevKeys & KEY_B)) {
                 tractor.implemento = (tractor.implemento + 1) % 4;
             }
 
-            // Trabajo en Campo
+            // Trabajo en campos
             for (int i = 0; i < 2; i++) {
                 if (tractor.x >= campos[i].x && tractor.x <= campos[i].x + campos[i].w &&
                     tractor.y >= campos[i].y && tractor.y <= campos[i].y + campos[i].h) {
@@ -264,61 +319,60 @@ int main(void) {
                     } else if (tractor.implemento == MAQ_COSECHADORA && campos[i].estado == TIERRA_LISTA) {
                         campos[i].estado = TIERRA_ARADA;
                         if (tractor.tolva < tractor.capTolva) tractor.tolva += 25;
-                    } else if (tractor.implemento == MAQ_REMOLQUE && tractor.tolva > 0) {
-                        campos[i].fertilizado = 1; // Abonar campo
                     }
-                }
-            }
-
-            // Cargar Abono en el Corral de Vacas
-            if (tractor.implemento == MAQ_REMOLQUE && tractor.x <= 60 && tractor.y >= 90) {
-                if ((keys & KEY_A) && !(prevKeys & KEY_A) && abonoCorral >= 20) {
-                    tractor.tolva = 100;
-                    abonoCorral -= 20;
-                }
-            }
-
-            // R + B: Vender Carga en Silo
-            if ((keys & KEY_R) && (keys & KEY_B)) {
-                if (tractor.x >= 190 && tractor.y <= 40 && tractor.tolva > 0) {
-                    dinero += tractor.tolva * 3;
-                    tractor.tolva = 0;
                 }
             }
         }
 
-        // --- RENDERIZADO GENERAL ---
-        drawSantaCruzMap(campos, 2);
+        // --- ACTUALIZACIÓN DE LA CÁMARA (SIGUE AL JUGADOR ACTIVO) ---
+        int focusX = (charActivo == 0) ? dueno.x : tractor.x;
+        int focusY = (charActivo == 0) ? dueno.y : tractor.y;
 
-        // Vehículos
-        drawRect(camioneta.x, camioneta.y, camioneta.w, camioneta.h, COLOR(2, 10, 28)); 
-        drawRect(tractor.x, tractor.y, tractor.w, tractor.h, COLOR(28, 3, 3));        
+        cam.x = focusX - SCREEN_W / 2;
+        cam.y = focusY - SCREEN_H / 2;
 
-        // Barritas de Gasolina sobre los vehículos
-        drawRect(tractor.x, tractor.y - 3, (tractor.gasolina * tractor.w) / 100, 2, COLOR(0, 31, 0));
-        drawRect(camioneta.x, camioneta.y - 3, (camioneta.gasolina * camioneta.w) / 100, 2, COLOR(0, 31, 0));
+        // Limitar cámara a los bordes del mapa
+        if (cam.x < 0) cam.x = 0;
+        if (cam.y < 0) cam.y = 0;
+        if (cam.x > MAP_W - SCREEN_W) cam.x = MAP_W - SCREEN_W;
+        if (cam.y > MAP_H - SCREEN_H) cam.y = MAP_H - SCREEN_H;
 
-        // Implemento Enganchado
+        // --- ESPERAR VBLANK Y DIBUJAR ---
+        waitForVBlank();
+
+        // 1. Dibujar Mapa y Campos
+        drawSantaCruzMap(cam, campos, 2);
+
+        // 2. Dibujar Vehículos con detalle
+        // Camioneta (Azul con cabina)
+        drawRectCam(camioneta.x, camioneta.y, camioneta.w, camioneta.h, COLOR(2, 8, 26), cam);
+        drawRectCam(camioneta.x + 3, camioneta.y + 2, 6, 6, COLOR(20, 25, 31), cam); // Parabrisas
+
+        // Tractor (Rojo con ruedas y cabina)
+        drawRectCam(tractor.x, tractor.y, tractor.w, tractor.h, COLOR(26, 3, 3), cam);
+        drawRectCam(tractor.x + 3, tractor.y + 3, 5, 5, COLOR(31, 31, 31), cam); // Cabina
+        drawRectCam(tractor.x - 2, tractor.y, 2, 4, COLOR(0, 0, 0)); // Rueda Trasera Izq
+        drawRectCam(tractor.x - 2, tractor.y + 8, 2, 4, COLOR(0, 0, 0)); // Rueda Trasera Der
+
+        // Implemento Enganchado al Tractor
         unsigned short colImp = COLOR(10, 10, 10);
         if (tractor.implemento == MAQ_ARADO)       colImp = COLOR(18, 9, 2);  
         if (tractor.implemento == MAQ_SEMBRADORA)   colImp = COLOR(2, 20, 2);  
         if (tractor.implemento == MAQ_COSECHADORA)  colImp = COLOR(31, 22, 0); 
         if (tractor.implemento == MAQ_REMOLQUE)     colImp = COLOR(15, 15, 25); 
 
-        drawRect(tractor.x - 6, tractor.y + 2, 5, 6, colImp);
+        drawRectCam(tractor.x - 8, tractor.y + 2, 7, 8, colImp, cam);
 
-        // Dueño a Pie
+        // 3. Dibujar Personaje a Pie (Detalle de personaje estilo GTA)
         if (!dueno.isDriver) {
-            drawRect(dueno.x, dueno.y, 4, 4, COLOR(31, 31, 0));
+            drawRectCam(dueno.x, dueno.y, 6, 6, COLOR(31, 24, 18), cam); // Cabeza
+            drawRectCam(dueno.x + 1, dueno.y + 2, 4, 4, COLOR(31, 0, 0), cam); // Camisa
         }
 
-        // HUD (Esquina Superior Izquierda)
-        drawRect(4, 4, 6, 6, charActivo == 0 ? COLOR(31, 31, 0) : COLOR(31, 0, 0)); 
-        drawRect(12, 4, 4, 4, tractor.aiActive ? COLOR(0, 31, 0) : COLOR(10, 10, 10)); 
+        // 4. Dibujar Minimapa fijo en pantalla
+        drawMinimap(focusX, focusY);
 
         prevKeys = keys;
-
-        for (volatile int i = 0; i < 1200; i++);
     }
 
     return 0;
