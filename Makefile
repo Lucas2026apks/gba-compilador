@@ -1,27 +1,38 @@
-PATH := $(DEVKITARM)/bin:$(PATH)
+# Nombre de tu archivo de salida (.gba)
+TARGET		:= juego_rpg_terraria
+BUILD		:= build
+SOURCES		:= src
+INCLUDES	:= include
 
-PREFIX  := arm-none-eabi-
-CC      := $(PREFIX)gcc
-OBJCOPY := $(PREFIX)objcopy
+# Configuración de devkitARM
+export PATH	:= $(DEVKITARM)/bin:$(PATH)
+PREFIX		:= arm-none-eabi-
+CC			:= $(PREFIX)gcc
+LD			:= $(PREFIX)gcc
 
-ARCH    := -mthumb -mthumb-interwork
-CFLAGS  := $(ARCH) -O2 -Wall -fomit-frame-pointer
-LDFLAGS := $(ARCH) -specs=gba.specs
+ARCH		:= -mthumb -mthumb-interwork
+CFLAGS		:= -g -Wall -O2 -ffunction-sections -fdata-sections $(ARCH) -specs=gba.specs
+LDFLAGS		:= -specs=gba.specs $(ARCH) -Wl,--gc-sections
 
-TARGET  := granja
-SRCS    := main.c
-OBJS    := $(SRCS:.c=.o)
+# Archivos fuente
+CFILES		:= $(foreach dir,$(SOURCES),$(wildcard $(dir)/*.c))
+OBJECTS		:= $(addprefix $(BUILD)/,$(notdir $(CFILES:.c=.o)))
 
-all: $(TARGET).gba
+export VPATH	:= $(foreach dir,$(SOURCES),$(dir))
 
-$(TARGET).elf: $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) -o $@
+all: $(BUILD) $(TARGET).gba
 
-%.gba: %.elf
-	$(OBJCOPY) -v -O binary $< $@
-	gbafix $@
+$(BUILD):
+	mkdir -p $@
+
+$(BUILD)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TARGET).gba: $(TARGET).elf
+	arm-none-eabi-objcopy -O binary $< $@
+
+$(TARGET).elf: $(OBJECTS)
+	$(LD) $(LDFLAGS) $(OBJECTS) -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET).elf $(TARGET).gba
-
-.PHONY: all clean
+	rm -rf $(BUILD) $(TARGET).elf $(TARGET).gba
