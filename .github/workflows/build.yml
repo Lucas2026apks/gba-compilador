@@ -14,26 +14,15 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Instalar dependencias esenciales de compilación
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make libarchive-tools curl
+      - name: Configurar entorno de devkitPro
+        uses: devkitpro/actions/setup@v1
 
-      - name: Instalar devkitPro pacman y herramientas de GBA mediante script oficial
+      - name: Instalar herramientas de GBA y Tonc
         run: |
-          # Descargar y ejecutar el instalador oficial de devkitPro para Linux
-          curl -LO https://github.com/devkitPro/pacman-install/releases/download/v3.0.2/pacman-install.sh
-          sudo bash pacman-install.sh
-          
-          # Instalar devkitARM y la librería libtonc
-          sudo dkp-pacman -Syu --noconfirm gba-dev gba-libtonc
+          dkp-pacman -Syu --noconfirm gba-dev gba-libtonc
 
       - name: Compilar proyecto con Makefile
         run: |
-          export DEVKITPRO=/opt/devkitpro
-          export DEVKITARM=${DEVKITPRO}/devkitARM
-          export PATH=${DEVKITARM}/bin:${PATH}
-          
           make
 
       - name: Subir ROM compilada como artefacto
