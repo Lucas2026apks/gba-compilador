@@ -14,15 +14,25 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar entorno de devkitPro
-        uses: devkitpro/actions/setup@main
-
-      - name: Instalar dependencias de GBA y Tonc
+      - name: Instalar dependencias del sistema y pacman de dkp
         run: |
-          dkp-pacman -Syu --noconfirm gba-libtonc
+          sudo apt-get update
+          sudo apt-get install -y wget bzip2 make libarchive-tools
+          
+          # Descargar e instalar el keyring y repositorio oficial de devkitPro
+          wget https://github.com/devkitPro/pacman-packages/releases/download/keyring-2023-01-26/devkitpro-keyring.pkg.tar.xz
+          sudo pacman -U --noconfirm devkitpro-keyring.pkg.tar.xz || sudo dkp-pacman -U --noconfirm devkitpro-keyring.pkg.tar.xz || true
 
-      - name: Compilar proyecto con Makefile
+      - name: Instalar devkitARM y Tonc
         run: |
+          sudo dkp-pacman -Syu --noconfirm gba-dev gba-libtonc
+
+      - name: Configurar variables de entorno y compilar
+        run: |
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=${DEVKITPRO}/devkitARM
+          export PATH=${DEVKITARM}/bin:${PATH}
+          
           make
 
       - name: Subir ROM compilada como artefacto
