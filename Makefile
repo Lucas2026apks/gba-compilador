@@ -1,28 +1,23 @@
-# --- CONFIGURACIÓN DEL PROYECTO ---
-TARGET		:= gba_mining_game
+# --- CONFIGURACIÓN DEL PROYECTO GBA ---
+TARGET		:= juego_gba
 SOURCES		:= .
 INCLUDES	:= .
-DATA		:= .
 
-# --- ARCHIVOS Y HERRAMIENTAS ---
+# --- CONFIGURACIÓN DE COMPILACIÓN ---
 ARCH		:= -mthumb -mthumb-interwork
-CFLAGS		:= -Wall -Wextra -O2 -g $(ARCH) $(INCLUDE)
-CXXFLAGS	:= $(CFLAGS)
-LDFLAGS		:= -g $(ARCH)
+CFLAGS		:= -Wall -Wextra -O2 $(ARCH) -I$(INCLUDES)
+LDFLAGS		:= $(ARCH) -specs=gba.specs -ltonc
 
-# Cargar las herramientas estándar de devkitARM (si usas devkitPro)
-ifeq ($(strip $(DEVKITPRO)),)
-$(error "Por favor, asegúrate de tener configurada la variable DEVKITPRO.")
-endif
-
-export PATH	:= $(DEVKITPRO)/devkitARM/bin:$(PATH)
+# Detección automática de devkitPro en Linux (GitHub Actions)
+export DEVKITPRO ?= /opt/devkitpro
+export DEVKITARM ?= $(DEVKITPRO)/devkitARM
 PREFIX		:= arm-none-eabi-
+
 CC			:= $(PREFIX)gcc
 LD			:= $(PREFIX)gcc
 OBJCOPY		:= $(PREFIX)objcopy
 GBAFIX		:= gbafix
 
-# --- REGLAS DE COMPILACIÓN ---
 CFILES		:= $(foreach dir,$(SOURCES),$(wildcard $(dir)/*.c))
 OBJS		:= $(CFILES:.c=.o)
 
@@ -33,7 +28,7 @@ $(TARGET).gba: $(TARGET).elf
 	@$(GBAFIX) $@
 
 $(TARGET).elf: $(OBJS)
-	@$(LD) $(LDFLAGS) $(OBJS) -ltonc -specs=gba.specs -o $@
+	@$(LD) $(LDFLAGS) $(OBJS) -o $@
 
 %.o: %.c
 	@$(CC) $(CFLAGS) -c $< -o $@
