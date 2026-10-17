@@ -2,27 +2,29 @@ name: Build GBA ROM
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: devkitpro/devkitarm:latest
+    container: devkitpro/base:latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Build ROM
+      - name: Instalar herramientas de GBA (devkitARM y Tonc)
+        run: |
+          dmpm install gba-eabi tonc
+
+      - name: Compilar proyecto con Makefile
         run: |
           make
 
-      - name: Upload .gba Artifact
+      - name: Subir ROM compilada como artefacto
         uses: actions/upload-artifact@v4
         with:
-          name: Granja-GBA-ROM
-          path: granja.gba
-          
+          name: juego-gba-rom
+          path: *.gba
