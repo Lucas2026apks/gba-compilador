@@ -9,15 +9,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: devkitpro/base:latest
 
     steps:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Instalar herramientas de GBA (devkitARM y Tonc)
+      - name: Configurar entorno de devkitPro
+        uses: devkitpro/actions/setup@main
+
+      - name: Instalar dependencias de GBA y Tonc
         run: |
-          dmpm install gba-eabi tonc
+          dkp-pacman -Syu --noconfirm gba-libtonc
 
       - name: Compilar proyecto con Makefile
         run: |
