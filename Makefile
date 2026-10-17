@@ -1,38 +1,42 @@
-# Nombre de tu archivo de salida (.gba)
-TARGET		:= juego_rpg_terraria
-BUILD		:= build
-SOURCES		:= src
-INCLUDES	:= include
+# --- CONFIGURACIÓN DEL PROYECTO ---
+TARGET		:= gba_mining_game
+SOURCES		:= .
+INCLUDES	:= .
+DATA		:= .
 
-# Configuración de devkitARM
-export PATH	:= $(DEVKITARM)/bin:$(PATH)
+# --- ARCHIVOS Y HERRAMIENTAS ---
+ARCH		:= -mthumb -mthumb-interwork
+CFLAGS		:= -Wall -Wextra -O2 -g $(ARCH) $(INCLUDE)
+CXXFLAGS	:= $(CFLAGS)
+LDFLAGS		:= -g $(ARCH)
+
+# Cargar las herramientas estándar de devkitARM (si usas devkitPro)
+ifeq ($(strip $(DEVKITPRO)),)
+$(error "Por favor, asegúrate de tener configurada la variable DEVKITPRO.")
+endif
+
+export PATH	:= $(DEVKITPRO)/devkitARM/bin:$(PATH)
 PREFIX		:= arm-none-eabi-
 CC			:= $(PREFIX)gcc
 LD			:= $(PREFIX)gcc
+OBJCOPY		:= $(PREFIX)objcopy
+GBAFIX		:= gbafix
 
-ARCH		:= -mthumb -mthumb-interwork
-CFLAGS		:= -g -Wall -O2 -ffunction-sections -fdata-sections $(ARCH) -specs=gba.specs
-LDFLAGS		:= -specs=gba.specs $(ARCH) -Wl,--gc-sections
-
-# Archivos fuente
+# --- REGLAS DE COMPILACIÓN ---
 CFILES		:= $(foreach dir,$(SOURCES),$(wildcard $(dir)/*.c))
-OBJECTS		:= $(addprefix $(BUILD)/,$(notdir $(CFILES:.c=.o)))
+OBJS		:= $(CFILES:.c=.o)
 
-export VPATH	:= $(foreach dir,$(SOURCES),$(dir))
-
-all: $(BUILD) $(TARGET).gba
-
-$(BUILD):
-	mkdir -p $@
-
-$(BUILD)/%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+all: $(TARGET).gba
 
 $(TARGET).gba: $(TARGET).elf
-	arm-none-eabi-objcopy -O binary $< $@
+	@$(OBJCOPY) -O binary $< $@
+	@$(GBAFIX) $@
 
-$(TARGET).elf: $(OBJECTS)
-	$(LD) $(LDFLAGS) $(OBJECTS) -o $@
+$(TARGET).elf: $(OBJS)
+	@$(LD) $(LDFLAGS) $(OBJS) -ltonc -specs=gba.specs -o $@
+
+%.o: %.c
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILD) $(TARGET).elf $(TARGET).gba
+	@rm -f $(TARGET).gba $(TARGET).elf $(OBJS)
