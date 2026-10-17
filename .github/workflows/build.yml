@@ -14,20 +14,21 @@ jobs:
       - name: Checkout del repositorio
         uses: actions/checkout@v4
 
-      - name: Instalar dependencias del sistema y pacman de dkp
+      - name: Instalar dependencias esenciales de compilación
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget bzip2 make libarchive-tools
-          
-          # Descargar e instalar el keyring y repositorio oficial de devkitPro
-          wget https://github.com/devkitPro/pacman-packages/releases/download/keyring-2023-01-26/devkitpro-keyring.pkg.tar.xz
-          sudo pacman -U --noconfirm devkitpro-keyring.pkg.tar.xz || sudo dkp-pacman -U --noconfirm devkitpro-keyring.pkg.tar.xz || true
+          sudo apt-get install -y make libarchive-tools curl
 
-      - name: Instalar devkitARM y Tonc
+      - name: Instalar devkitPro pacman y herramientas de GBA mediante script oficial
         run: |
+          # Descargar y ejecutar el instalador oficial de devkitPro para Linux
+          curl -LO https://github.com/devkitPro/pacman-install/releases/download/v3.0.2/pacman-install.sh
+          sudo bash pacman-install.sh
+          
+          # Instalar devkitARM y la librería libtonc
           sudo dkp-pacman -Syu --noconfirm gba-dev gba-libtonc
 
-      - name: Configurar variables de entorno y compilar
+      - name: Compilar proyecto con Makefile
         run: |
           export DEVKITPRO=/opt/devkitpro
           export DEVKITARM=${DEVKITPRO}/devkitARM
