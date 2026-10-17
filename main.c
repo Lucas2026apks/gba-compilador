@@ -36,10 +36,9 @@ int timerDobleClickDown = 0;
 int cameraX = 140; 
 int cameraY = 0;
 
-// Variables de control para renderizado condicional (Cero parpadeo)
 int needsRedraw = 1;
 int frameCounter = 0;
-#define MAX_REDRAW_INTERVAL 60 // 60 frames = exactamente 1 segundo en GBA (60 FPS)
+#define MAX_REDRAW_INTERVAL 60
 
 unsigned int semillaRNG = 1337;
 int randomGBA(int max) {
@@ -194,11 +193,10 @@ void procesarControles(void) {
     if (keysPressed & KEY_A) {
         if (worldMap[playerY + 1][playerX] != BLOQUE_MURO_NEGRO) {
             worldMap[playerY + 1][playerX] = BLOQUE_AIRE;
-            needsRedraw = 1; // Forzar redibujo si se rompe un bloque
+            needsRedraw = 1;
         }
     }
 
-    // Si el jugador se movió, activamos el indicador de redibujo
     if (playerX != oldX || playerY != oldY) {
         needsRedraw = 1;
     }
@@ -252,7 +250,6 @@ void renderizarVentanaCamara(void) {
             u16 tileConPaleta = (paletaEfectiva << 12); 
 
             mapaVRAM[(posY)     * 32 + (posX)]     = tileConPaleta;
-            map_VRAM_fix[...]; // (Optimizado para VRAM limpia)
             mapaVRAM[(posY)     * 32 + (posX + 1)] = tileConPaleta;
             mapaVRAM[(posY + 1) * 32 + (posX)]     = tileConPaleta;
             mapaVRAM[(posY + 1) * 32 + (posX + 1)] = tileConPaleta;
@@ -273,8 +270,6 @@ int main(void) {
     while(1) {
         procesarControles();
 
-        // Control de refresco: solo recarga la pantalla si el jugador se movió/rompió algo, 
-        // O si pasa exactamente 1 segundo (60 frames) de inactividad por seguridad.
         frameCounter++;
         if (needsRedraw || frameCounter >= MAX_REDRAW_INTERVAL) {
             renderizarVentanaCamara();
